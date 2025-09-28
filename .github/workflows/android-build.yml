@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      XDG_CONFIG_HOME: /home/runner
 
     steps:
       - name: Checkout
@@ -22,29 +23,31 @@ jobs:
           java-version: '17'
           cache: gradle
 
-      - name: Install Android SDK (cmdline-tools, platform-tools, build-tools)
+      # Install platform + build-tools explicitly (idempotent)
+      - name: Install Android SDK (platform 34, build-tools 34.0.0)
         run: |
-          yes | sudo ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install \
-            "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+          yes | "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" \
+            "platform-tools" "platforms;android-34" "build-tools;34.0.0" || true
 
       - name: Create local.properties
-        run: echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+        run: echo "sdk.dir=${ANDROID_SDK_ROOT}" > local.properties
 
-      - name: Install latest AAPT2 dynamically
+      # 🔑 Ensure debug keystore exists where Gradle expects it
+      - name: Prepare debug keystore
         run: |
-          set -euo pipefail
-          META="https://dl.google.com/android/maven2/com/android/tools/build/aapt2/maven-metadata.xml"
-          VER="$(curl -fsSL "$META" | sed -n 's:.*<latest>\(.*\)</latest>.*:\1:p')"
-          if [ -z "$VER" ]; then
-            VER="$(curl -fsSL "$META" | sed -n 's:.*<release>\(.*\)</release>.*:\1:p')"
+          set -euxo pipefail
+          mkdir -p ~/.android
+          if [ ! -f ~/.android/debug.keystore ]; then
+            keytool -genkeypair \
+              -alias androiddebugkey \
+              -keypass android \
+              -keystore ~/.android/debug.keystore \
+              -storepass android \
+              -dname "CN=Android Debug,O=Android,C=US" \
+              -keyalg RSA -keysize 2048 -validity 10000
           fi
-          echo "Using AAPT2 version: $VER"
-          URL="https://dl.google.com/android/maven2/com/android/tools/build/aapt2/${VER}/aapt2-${VER}-linux.jar"
-          curl -fsSL "$URL" -o aapt2.jar
-          unzip -p aapt2.jar aapt2 > aapt2
-          chmod +x aapt2
-          sudo mv aapt2 /usr/bin/aapt2
-          aapt2 version || true
+          mkdir -p ~/.config/.android
+          ln -sf ~/.android/debug.keystore ~/.config/.android/debug.keystore
 
       - name: Make gradlew executable
         run: chmod +x ./gradlew
@@ -52,15 +55,16 @@ jobs:
       - name: Build (assembleDebug)
         run: ./gradlew --no-daemon --stacktrace assembleDebug
 
-      - name: Upload build artifacts (APK/AAB + logs)
+      - name: Upload artifacts (APK/AAB + logs)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: android-artifacts
+          if-no-files-found: warn
           path: |
             **/build/outputs/**/*.apk
             **/build/outputs/**/*.aab
             **/build/reports/**
             **/build/test-results/**
-            ~/.gradle/daemon/*.log
+            ~/.gradle/daemon/*/daemon-*.log
             ~/.gradle/build-scan-data/**
-          if-no-files-found: warn
