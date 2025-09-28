@@ -2,7 +2,7 @@ name: Build Android
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
@@ -22,8 +22,21 @@ jobs:
           java-version: '17'
           cache: gradle
 
-      - name: Point to preinstalled Android SDK
-        run: echo "sdk.dir=/usr/local/lib/android/sdk" > local.properties
+      - name: Install Android SDK (cmdline-tools, platform-tools, build-tools)
+        run: |
+          sudo mkdir -p "$ANDROID_SDK_ROOT"
+          sudo chown "$USER:$USER" "$ANDROID_SDK_ROOT"
+          curl -fsSL -o cmdtools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -q cmdtools.zip -d "$ANDROID_SDK_ROOT"
+          mv "$ANDROID_SDK_ROOT/cmdline-tools" "$ANDROID_SDK_ROOT/cmdline-tools-tmp"
+          mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools/latest"
+          mv "$ANDROID_SDK_ROOT/cmdline-tools-tmp/"* "$ANDROID_SDK_ROOT/cmdline-tools/latest/"
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses
+          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
+            "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Create local.properties
+        run: echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
 
       - name: Make gradlew executable
         run: chmod +x ./gradlew
@@ -31,7 +44,8 @@ jobs:
       - name: Build (assembleDebug)
         run: ./gradlew --no-daemon --stacktrace assembleDebug
 
-      - name: Upload build artifacts (APK/AAB)
+      - name: Upload artifacts (APK/AAB + logs)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: android-artifacts
@@ -39,3 +53,6 @@ jobs:
           path: |
             **/build/outputs/**/*.apk
             **/build/outputs/**/*.aab
+            **/build/reports/**
+            ~/.gradle/daemon/*/*.log
+            ~/.gradle/build-scan-data/**
