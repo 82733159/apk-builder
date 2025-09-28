@@ -46,3 +46,15 @@ dependencies {
     implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.webkit:webkit:1.10.0")
 }
+
+/* ---- Auto-added by CI fix ---- */
+android {
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+    }
+    kotlinOptions {
+        jvmTarget = "1.8"
+    }
+}
+/* ---- End CI fix ---- */
