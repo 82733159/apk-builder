@@ -23,16 +23,16 @@ jobs:
           java-version: '17'
           cache: gradle
 
-      # Install platform + build-tools explicitly (idempotent)
-      - name: Install Android SDK (platform 34, build-tools 34.0.0)
+      - name: Install Android SDK (platform 34, build-tools 34.0.0, aapt2)
         run: |
           yes | "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" \
             "platform-tools" "platforms;android-34" "build-tools;34.0.0" || true
+          # Symlink aapt2 so Gradle can find it in /usr/bin
+          ln -sf ${ANDROID_SDK_ROOT}/build-tools/34.0.0/aapt2 /usr/bin/aapt2
 
       - name: Create local.properties
         run: echo "sdk.dir=${ANDROID_SDK_ROOT}" > local.properties
 
-      # 🔑 Ensure debug keystore exists where Gradle expects it
       - name: Prepare debug keystore
         run: |
           set -euxo pipefail
