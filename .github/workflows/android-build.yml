@@ -24,19 +24,27 @@ jobs:
 
       - name: Install Android SDK (cmdline-tools, platform-tools, build-tools)
         run: |
-          sudo mkdir -p "$ANDROID_SDK_ROOT"
-          sudo chown "$USER:$USER" "$ANDROID_SDK_ROOT"
-          curl -fsSL -o cmdtools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-          unzip -q cmdtools.zip -d "$ANDROID_SDK_ROOT"
-          mv "$ANDROID_SDK_ROOT/cmdline-tools" "$ANDROID_SDK_ROOT/cmdline-tools-tmp"
-          mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools/latest"
-          mv "$ANDROID_SDK_ROOT/cmdline-tools-tmp/"* "$ANDROID_SDK_ROOT/cmdline-tools/latest/"
-          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses
-          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
+          yes | sudo ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install \
             "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
       - name: Create local.properties
         run: echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+
+      - name: Install latest AAPT2 dynamically
+        run: |
+          set -euo pipefail
+          META="https://dl.google.com/android/maven2/com/android/tools/build/aapt2/maven-metadata.xml"
+          VER="$(curl -fsSL "$META" | sed -n 's:.*<latest>\(.*\)</latest>.*:\1:p')"
+          if [ -z "$VER" ]; then
+            VER="$(curl -fsSL "$META" | sed -n 's:.*<release>\(.*\)</release>.*:\1:p')"
+          fi
+          echo "Using AAPT2 version: $VER"
+          URL="https://dl.google.com/android/maven2/com/android/tools/build/aapt2/${VER}/aapt2-${VER}-linux.jar"
+          curl -fsSL "$URL" -o aapt2.jar
+          unzip -p aapt2.jar aapt2 > aapt2
+          chmod +x aapt2
+          sudo mv aapt2 /usr/bin/aapt2
+          aapt2 version || true
 
       - name: Make gradlew executable
         run: chmod +x ./gradlew
@@ -44,15 +52,15 @@ jobs:
       - name: Build (assembleDebug)
         run: ./gradlew --no-daemon --stacktrace assembleDebug
 
-      - name: Upload artifacts (APK/AAB + logs)
-        if: always()
+      - name: Upload build artifacts (APK/AAB + logs)
         uses: actions/upload-artifact@v4
         with:
           name: android-artifacts
-          if-no-files-found: warn
           path: |
             **/build/outputs/**/*.apk
             **/build/outputs/**/*.aab
             **/build/reports/**
-            ~/.gradle/daemon/*/*.log
+            **/build/test-results/**
+            ~/.gradle/daemon/*.log
             ~/.gradle/build-scan-data/**
+          if-no-files-found: warn
