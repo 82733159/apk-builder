@@ -23,12 +23,17 @@ jobs:
           java-version: '17'
           cache: gradle
 
-      - name: Install Android SDK (platform 34, build-tools 34.0.0, aapt2)
+      - name: Install Android SDK (platform 34, build-tools 34.0.0)
         run: |
           yes | "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" \
             "platform-tools" "platforms;android-34" "build-tools;34.0.0" || true
-          # Symlink aapt2 so Gradle can find it in /usr/bin
-          ln -sf ${ANDROID_SDK_ROOT}/build-tools/34.0.0/aapt2 /usr/bin/aapt2
+
+      - name: Point Gradle at aapt2
+        run: |
+          AAPT2_PATH="${ANDROID_SDK_ROOT}/build-tools/34.0.0/aapt2"
+          echo "android.aapt2FromMavenOverride=${AAPT2_PATH}" >> gradle.properties
+          mkdir -p ~/.gradle
+          echo "android.aapt2FromMavenOverride=${AAPT2_PATH}" >> ~/.gradle/gradle.properties
 
       - name: Create local.properties
         run: echo "sdk.dir=${ANDROID_SDK_ROOT}" > local.properties
